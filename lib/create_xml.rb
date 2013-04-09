@@ -30,7 +30,7 @@ module CreateXml
       :object_id => object_id,
       :restaurant_id => restaurant_id,
       :table => table,
-      :schema => schema
+      :schema => schema,
       :xml => xml
     )
     xml_object.save!
