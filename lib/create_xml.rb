@@ -1,4 +1,5 @@
 require "create_xml/version"
+
 # CreateXml для создания xml объетов для синхронизации
 #  методы
 #     create_object_xml -> для сосздания xml объета для обычной синхронизации
