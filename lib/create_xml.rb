@@ -1,14 +1,13 @@
 require "create_xml/version"
-
 # CreateXml для создания xml объетов для синхронизации
-#   public методы
+#  методы
 #     create_object_xml -> для сосздания xml объета для обычной синхронизации
 #     create_default_xml_object -> этот метод для создание xmlов данных по умолчанию ресторана
 #       сохраняет xml только для восстановления
 module CreateXml
   # Метод для ActiveRecord создания xml  востановления нужен restoran_id метод написан для данных создающехся по умолчанию для ресторана
   def create_restaurant_default_xml
-    create_default_xml_object(self, selfrestaurant_id)
+    create_default_xml_object(self, self.restaurant_id)
   end
 
 
@@ -24,18 +23,18 @@ module CreateXml
     schema = object.class.table_name.split('.')[1]
     action = action.to_i == 1 ? 0 : 1
     schema = 'restaurant' if schema.blank?
-    xml = create_xml(object, table, action)
 
     xml_object = SyncXmlObject.new(
       :object_id => object_id,
       :restaurant_id => restaurant_id,
       :table => table,
-      :schema => schema,
-      :xml => xml
+      :schema => schema
     )
     xml_object.save!
+    xml_object.xml = create_xml(object, table, action, xml_object.id)
+    xml_object.save!
 
-    save_restore_xml(restaurant_id, schema, table, xml, object_id)
+    save_restore_xml(restaurant_id, schema, table, object, action)
     create_restaurant_xml(restaurant_id)
   end
 
@@ -48,8 +47,7 @@ module CreateXml
     schema = object.class.table_name.split('.')[1].blank? ? 'restaurant' : object.class.table_name.split('.')[0]
     action = 0
     schema = 'restaurant' if schema.blank?
-    xml = create_xml(object, table, action)
-    save_restore_xml(restaurant_id, schema, table, xml, id)
+    save_restore_xml(restaurant_id, schema, table, object, action)
   end
 
 
@@ -69,7 +67,7 @@ module CreateXml
                     sync_xml_objects.created_at ASC
                   ").limit(500)
 
-    return nil unless xml_objects.blank?
+    return nil if xml_objects.blank?
 
     table = ""
     xml = "<?xml version='1.0' encoding='utf-8' ?><response>"
@@ -90,11 +88,17 @@ module CreateXml
   end
 
   # Общий метод для создание XML
-  def create_xml(object, table, action)
-    xml = "<#{table.singularize} return_id='#{object.id}' action='#{action}'>"
+  def create_xml(object, table, action, return_id)
+    xml = "<#{table.singularize} return_id='#{return_id}' action='#{action}'>"
     object_params = object.attributes
 
     if table.to_s == 'courses'
+      object_params.delete("unit_id")
+      object_params.delete("count")
+      object_params.delete('weight_out')
+    end
+
+    if table.to_s == 'bill_course_resigns'
       object_params.delete("unit_id")
       object_params.delete("count")
       object_params.delete('weight_out')
@@ -107,7 +111,12 @@ module CreateXml
         else
           object_value = attr[1].blank? ? '' : CGI.escapeHTML(attr[1].to_s)
         end
-        xml << "<#{attr[0]}>#{object_value}</#{attr[0]}>"
+
+        if table.to_s == 'bill_course_resigns' && attr[0].to_s == 'count'
+          xml << "<course_count>#{object_value}</course_count>"
+        else
+          xml << "<#{attr[0]}>#{object_value}</#{attr[0]}>"
+        end
       end
     end
 
@@ -115,16 +124,16 @@ module CreateXml
     xml
   end
 
-
   # Метод для сохранения XML восстановления
-  def save_restore_xml(restaurant_id, schema, table, xml, id)
+  def save_restore_xml(restaurant_id, schema, table, object, action)
     restore_xml = XmlObject.new(
-      object_id: id,
-      xml: xml,
+      object_id: object.id,
       restaurant_id: restaurant_id,
       table: table,
       schema: schema
     )
+    restore_xml.save!
+    restore_xml.xml = create_xml(object, table, action, restore_xml.id)
     restore_xml.save!
   end
 
